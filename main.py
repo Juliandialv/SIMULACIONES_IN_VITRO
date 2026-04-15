@@ -1,40 +1,46 @@
 """Main program of the application"""
 
-from siv.config import MESH_DIR
+"""Main program of the application."""
+
+import numpy as np
+from siv.config import RAW_DIR, MESH_DIR
 from siv.io.loader import load_mesh
-from siv.landmarks.renderer import render_front_view
-from siv.landmarks.detector import detect_landmarks_2d
-from siv.landmarks.projector import (
-    render_depth_map,
-    project_landmarks_to_3d,
-    landmarks_to_pointcloud,
+from siv.processing.landmarks import (
+    load_landmarks_pp,
+    detect_landmarks_auto,
+    landmarks_to_plane,
 )
-from siv.visualization.viewer import show_pointcloud_with_landmarks
+from siv.visualization.viewer import show_mesh_with_landmarks
+
+
+def compare_landmarks(
+    manual: dict[str, np.ndarray],
+    auto: dict[str, np.ndarray],
+) -> None:
+    """Print Euclidean distance between manual and automatic landmarks."""
+    print("\n--- Manual vs Automatic comparison ---")
+    for name in manual:
+        if name in auto:
+            dist = np.linalg.norm(manual[name] - auto[name])
+            print(f"  {name}: {dist:.2f} mm")
+    print("--------------------------------------\n")
+
 
 def main():
-    """Main execution code"""
+    """Main application's code blcock"""
     mesh = load_mesh(MESH_DIR / "P" / "P_1_6.obj")
-    print(f"[main] Mesh loaded with {len(mesh.vertices)} vertices.")
 
-    # 2. Render frontal view + get intrinsics
-    image, intrinsics = render_front_view(mesh)
+    # Manual landmarks (gold standard)
+    landmarks_manual = load_landmarks_pp(RAW_DIR / "P_1_6_picked_points.pp")
 
-    # 3. Detect 2D landmarks on the rendered image
-    landmarks_2d = detect_landmarks_2d(image)
-    if landmarks_2d is None:
-        print("No landmarks detected. Check mesh orientation.")
-        return
+    # Automatic detection
+    landmarks_auto = detect_landmarks_auto(mesh)
 
-    # 4. Render depth map and project landmarks to 3D
-    depth_map = render_depth_map(mesh)
-    landmarks_3d = project_landmarks_to_3d(landmarks_2d, depth_map, intrinsics)
+    # Comparison
+    compare_landmarks(landmarks_manual, landmarks_auto)
 
-    # 5. Build landmark point cloud
-    landmark_pcd = landmarks_to_pointcloud(landmarks_3d, color=[1.0, 0.0, 0.0])
-
-    # 6. Convert mesh to point cloud for visualization and show
-    mesh_pcd = mesh.sample_points_uniformly(number_of_points=500_000)
-    show_pointcloud_with_landmarks(mesh_pcd, landmark_pcd)
+    # Visual inspection — change to landmarks_auto to inspect automatic
+    show_mesh_with_landmarks(mesh, landmarks_manual, show_wireframe=True, sphere_radius=2.0)
 
 
 if __name__ == "__main__":
