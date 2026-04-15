@@ -5,4 +5,4 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "siv"
 version = "0.1.0"
-dependencies = ["open3d", "pyvista", "numpy", "opencv-python"]
+dependencies = ["open3d", "pyvista", "numpy", "opencv-python", "mediapipe"]

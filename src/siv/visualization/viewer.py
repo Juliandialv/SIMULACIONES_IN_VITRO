@@ -60,6 +60,38 @@ def show_pointcloud(
     vis.run()
     vis.destroy_window()
 
+def show_pointcloud_with_landmarks(
+    pcd: o3d.geometry.PointCloud,
+    landmarks: o3d.geometry.PointCloud,
+    title: str = WINDOW_TITLE,
+    point_size: float = POINT_SIZE,
+    landmark_size: float = 6.0,
+) -> None:
+    """Display a point cloud with landmark points overlaid.
+
+    Landmarks are rendered larger and in a distinct color so they
+    are clearly visible over the base geometry.
+
+    Args:
+        pcd: Base point cloud.
+        landmarks: Landmark points as a separate colored PointCloud.
+        title: Window title.
+        point_size: Size for the base cloud points.
+        landmark_size: Size for the landmark points.
+    """
+    if not pcd.has_colors():
+        pcd.paint_uniform_color(POINT_COLOR)
+
+    vis = _build_visualizer(title)
+    vis.add_geometry(pcd)
+    vis.add_geometry(landmarks)
+
+    opt = vis.get_render_option()
+    opt.point_size = point_size
+
+    vis.run()
+    vis.destroy_window()
+
 def show_mesh(
         mesh: o3d.geometry.TriangleMesh,
         title: str = WINDOW_TITLE,
