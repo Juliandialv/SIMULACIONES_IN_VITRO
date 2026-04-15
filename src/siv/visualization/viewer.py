@@ -48,3 +48,4 @@ def show_pointcloud(
 
     vis.run()
     vis.destroy_window()
+    
