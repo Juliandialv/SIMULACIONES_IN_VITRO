@@ -1,20 +1,14 @@
 """Main program of the application"""
 
-from siv.io.loader import load_pointcloud
-from siv.io.writer import save_pointcloud
-from siv.visualization.viewer import show_pointcloud
-from siv.processing.pointcloud import voxel_downsample
-from siv.config import RAW_DIR, PROCESSED_DIR
+from siv.io.loader import load_mesh
+from siv.config import MESH_DIR
+from siv.visualization.viewer import show_mesh
 
 def main():
     """Main execution code"""
-    pcd = load_pointcloud(RAW_DIR / "Symmetric_Head.ply")
-    print(f"[main] Point cloud loaded: {len(pcd.points)} points.")
-    pcd_down = voxel_downsample(pcd, voxel_size=1.5)
-
-    save_pointcloud(pcd_down,
-                    PROCESSED_DIR / "Symmetric_Head_voxeldownsample_1.5.ply")
-    show_pointcloud(pcd_down)
+    mesh = load_mesh(MESH_DIR / "P" / "P_1_6.obj")
+    print(f"[main] Mesh loaded: {len(mesh.vertices)} vertices.")
+    show_mesh(mesh, show_wireframe=True)
 
 
 if __name__ == "__main__":
