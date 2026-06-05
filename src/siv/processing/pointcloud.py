@@ -2,6 +2,8 @@
 
 import open3d as o3d
 
+from src.siv.utils.logger import logger, LogLevel
+
 def random_downsample(
         pcd: o3d.geometry.PointCloud,
         ratio: float,
@@ -27,10 +29,11 @@ def random_downsample(
         raise ValueError(f"ratio must be in (0,1], got {ratio}.")
 
     downsampled = pcd.random_down_sample(ratio)
-    print(f"[random_downsample] {len(pcd.points)} -> "
-          f"{len(downsampled.points)} "
-          f"points ({ratio*100:.0f}% kept)")
-
+    logger.log(
+        f"{len(pcd.points)} -> {len(downsampled.points)} points ({ratio*100:.0f}% kept)",
+        LogLevel.INFO,
+        _depth=1
+    )
     return downsampled
 
 def voxel_downsample(
@@ -62,8 +65,9 @@ def voxel_downsample(
         raise ValueError(f"voxel_size must be positive, got {voxel_size}.")
 
     downsampled = pcd.voxel_down_sample(voxel_size)
-    print(f"[voxel_downsample] {len(pcd.points)} -> "
-          f"{len(downsampled.points)} "
-          f"points (voxel_size: {voxel_size}).")
-
+    logger.log(
+        f"{len(pcd.points)} -> {len(downsampled.points)} points (voxel_size: {voxel_size})",
+        LogLevel.INFO,
+        _depth=1
+    )
     return downsampled

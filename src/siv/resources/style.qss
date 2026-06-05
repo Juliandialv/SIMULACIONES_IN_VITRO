@@ -1,0 +1,65 @@
+QMainWindow {
+    background-color: rgb(40, 43, 48);
+}
+
+* {
+    font-family: "Segoe UI";
+}
+
+QTextEdit#textEdit_log {
+    background-color: rgb(54, 57, 63);
+    color: #dcdcdc;
+    font-family: Consolas;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 5px;
+}
+
+QTextEdit#textEdit_log QScrollBar {
+    background: rgb(40, 43, 48);
+}
+
+QPushButton#qpushButton_landmarks {
+    background-color: rgb(40, 43, 48);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QPushButton#qpushButton_landmarks:hover {
+    background-color: #5865F2;
+}
+
+QPushButton#qpushButton_landmarks:pressed {
+    background-color: #4752c4;
+}
+
+QPushButton#qpushButton_compute {
+    background-color: rgb(40, 43, 48);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QPushButton#qpushButton_compute:hover {
+    background-color: #5865F2;
+}
+
+QPushButton#qpushButton_compute:pressed {
+    background-color: #4752c4;
+}
+
+QLabel#label_picking_hint {
+    background-color: rgb(54, 57, 63);
+    color: #ffffff;
+    font-family: "Segoe UI";
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px;
+}

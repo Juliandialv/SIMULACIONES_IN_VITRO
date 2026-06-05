@@ -1,168 +1,255 @@
-"""Interactive 3D landmark picking using Open3D."""
+"""Interactive landmark picking integrated in the PyVista/Qt viewport."""
+
+from __future__ import annotations
 
 import numpy as np
-import open3d as o3d
-from siv.processing.pointcloud import voxel_downsample
+import pyvista as pv
 
-# Anatomical region filters (based on normalize bbox coordinates)
-_REGIONS = {
-    "sellion": {
-        "description": "the sellion (nasal bridge)",
-        "filter": lambda norm: (
-            (norm[:,0] > 0.80) & # anterior X
-            (np.abs(norm[:,1] - 0.5) < 0.2) # central Y
-        ),
-        "view": "three_quarters",
+from src.siv.utils.logger import logger, LogLevel
+from src.siv.visualization.config import BACKGROUND_COLOR
+
+from PySide6.QtCore import QObject, Signal
+
+CLR_CONTEXT  = "#4488ff"
+CLR_SELLION  = "#f5a623"
+CLR_RIGHT    = "#e74c3c"
+CLR_LEFT     = "#2ecc71"
+
+LANDMARK_COLORS = {
+    "sellion":       CLR_SELLION,
+    "right tragion": CLR_RIGHT,
+    "left tragion":  CLR_LEFT,
+}
+
+CAMERA_PRESETS = {
+    "anterior": {
+        "position": (0.0, -1.0, 0.0),
+        "up":       (0.0,  0.0, 1.0),
     },
-    "right tragion": {
-        "description": "the right tragion (right rear)",
-        "filter": lambda norm: norm[:,1] < 0.20, # lateral right Y 
-        "view": "right_lateral",
+    "right_lateral": {
+        "position": (0.0,  1.0, 0.0),
+        "up":       (0.0,  0.0, 1.0),
     },
-    "left tragion": {
-        "description": "the left tragion (left rear)",
-        "filter": lambda norm: norm[:,1] > 0.80, # lateral left Y
-        "view": "left_lateral",
+    "left_lateral": {
+        "position": (0.0, -1.0, 0.0),
+        "up":       (0.0,  0.0, 1.0),
     },
 }
 
-def _normalize_vertices(vertices: np.ndarray) -> np.ndarray:
-    """Normalize vertex coordinates to [0, 1] per axis."""
-    bbox_min = vertices.min(axis=0)
-    bbox_max = vertices.max(axis=0)
-    return (vertices - bbox_min) / (bbox_max - bbox_min)
+LANDMARK_SEQUENCE = [
+    {
+        "name":   "sellion",
+        "label":  "Sellion (nasal bridge)",
+        "camera": "anterior",
+        "clip_mask": None,  # sin recorte, se ve todo
+    },
+    {
+        "name":   "right tragion",
+        "label":  "Right tragion (right ear tragus)",
+        "camera": "right_lateral",
+        "clip_mask": lambda n: n[:, 1] < 0.55,  # solo hemisferio derecho (Y bajo)
+    },
+    {
+        "name":   "left tragion",
+        "label":  "Left tragion (left ear tragus)",
+        "camera": "left_lateral",
+        "clip_mask": lambda n: n[:, 1] > 0.45,  # solo hemisferio izquierdo (Y alto)
+    },
+]
 
-def _set_camera(vis: o3d.visualization.VisualizerWithEditing,
-                view: str,
-                center: np.ndarray) -> None:
-    """Set camera to a prefifined anatomical viewpoint
-    
-    Args:
-        vis: Open3D visualizer instance.
-        view: One of 'three_quarters', 'right_lateral', 'left_latearl'.
-        center: Centroid of the geometry, used as look-at target.
-    """
-    ctr = vis.get_view_control()
 
-    # Reset to a known state first
-    ctr.set_lookat(center.tolist())
-    ctr.set_up([0, 0, 1])
+def _normalize(points: np.ndarray) -> np.ndarray:
+    bbox_min = points.min(axis=0)
+    bbox_max = points.max(axis=0)
+    extent   = bbox_max - bbox_min
+    extent[extent == 0] = 1.0
+    return (points - bbox_min) / extent
 
-    if view == "three_quarters":
-        ctr.set_front([1.0, 1.0, 1.0])
-    elif view == "right_lateral":
-        ctr.set_front([0.0, -1.0, -0.1]) # looking from right (+Y toward -Y)
-    elif view == "left_lateral":
-        ctr.set_front([0.0, 1.0, -0.1]) # looking from left (-Y toward +Y)
 
-    ctr.set_zoom(0.6)
+class LandmarkPicker(QObject):
 
-def _pick_single_landmark(
-        pcd_region: o3d.geometry.PointCloud,
-        center: np.ndarray,
-        name: str,
-        description: str,
-        view: str,
-        window_size: tuple[int, int] = (1280, 720),
-) -> np.ndarray | None:
-    """Open a picking window for a single landmark.
-    
-    Args:
-        pcd_region: Point cloud filtered to the anatomical region.
-        center: Geometry centroid for camera targeting.
-        name: Landmark key name.
-        description: Human-readable description show in window title.
-        view: Camera viewpoint preset.
-        window_size: Window dimensions (width, length).
-        
-    Returns:
-        (3,) coordinate array of the selected point, or None if skipped."""
-    title = f"Select {description} | Shift+click to pick | Q to confirm"
-    print(f"\n[picker] Please select {description}.")
-    print(f"    Shift+click to pic, Shift+right click to undo, Q to confirm.")
+    hint_changed = Signal(str)   # ← señal que lleva el texto del hint
 
-    vis = o3d.visualization.VisualizerWithEditing()
-    vis.create_window(window_name=title, width=window_size[0],
-                      height=window_size[1])
-    vis.add_geometry(pcd_region)
-    _set_camera(vis, view, center)
-    vis.run()
+    def __init__(
+        self,
+        plotter_global,
+        plotter_pick,
+        cloud: pv.PolyData,
+        points: np.ndarray,
+    ):
+        super().__init__()  # ← necesario para QObject
+        self._plotter_global = plotter_global
+        self._plotter_pick   = plotter_pick
+        self._cloud          = cloud
+        self._points         = points
+        bounds               = cloud.bounds
+        self._center         = np.array([
+            (bounds[0] + bounds[1]) / 2,
+            (bounds[2] + bounds[3]) / 2,
+            (bounds[4] + bounds[5]) / 2,
+        ])
+        self._landmarks: dict[str, np.ndarray] = {}
+        self._step     = 0
+        self._callback = None
 
-    picked_indices = vis.get_picked_points()
-    vis.destroy_window()
+    def start(self, on_complete) -> None:
+        self._callback = on_complete
+        self._step     = 0
+        self._landmarks = {}
+        logger.log("Landmark picking session started", LogLevel.INFO)
+        self._setup_global_panel()
+        self._pick_current_step()
 
-    if not picked_indices:
-        print(f"[picker] WARNING: No point selected for {name}.")
-        return None
+    def _setup_global_panel(self) -> None:
+        self._plotter_global.clear()
+        self._plotter_global.add_points(
+            self._cloud,
+            color=CLR_CONTEXT,
+            point_size=1.5,
+            render_points_as_spheres=False,
+        )
+        self._plotter_global.add_axes(
+            line_width=3, labels_off=False,
+            x_color="#ff4444", y_color="#44ff44", z_color="#4488ff",
+        )
+        self._plotter_global.reset_camera()
+        self._plotter_global.render()
 
-    if len(picked_indices) > 1:
-        print(f"[picker] WARNING: {len(picked_indices)} points selected for "
-              f"{name}, using the last one.")
+    def _pick_current_step(self) -> None:
+        if self._step >= len(LANDMARK_SEQUENCE):
+            self._finish()
+            return
 
-    pts = np.asarray(pcd_region.points)
-    coords = pts[picked_indices[-1]]
-    print(f"[picker] {name}: {coords}")
-    return coords
+        cfg  = LANDMARK_SEQUENCE[self._step]
+        name = cfg["name"]
+        clip_mask = cfg["clip_mask"]
 
-def pick_landmarks(
-        mesh: o3d.geometry.TriangleMesh,
-        n_samples: int = 1000000,
-        window_size: tuple[int, int] = (1280, 270),
-) -> dict[str, np.ndarray]:
-    """Interactively pick anatomical landmarks on a head mesh.
-    
-    Opens one window per landmark, each showing only the relevant
-    anatomical region to prevent accidental selecion of the wrong side.
-    
-    Landmarks picked:
-        - sellion: nasal bridge (most concave point of the nose)ç
-        - right_tragion: right ear tragus
-        - left_tragion: left ear tragus
-        
-    Args:
-        mesh: Input TriangleMesh of the head.
-        n_samples: Number of points sampled from the mesh surface for 
-                   picking. Higher values give more precision.
-        window_size: Pickig window dimensions (width, height).
-        
-    Returns:
-        Dictionary mapping landmark name to (3,) coordinate array.
-        Missing landmarks (skipped by user) are absemt from the dict
-    """
-    pcd_full = mesh.sample_points_uniformly(number_of_points=n_samples)
-    pcd_down = voxel_downsample(pcd_full, voxel_size=0.75)
-    vertices = np.asarray(pcd_down.points)
-    norm = _normalize_vertices(vertices)
-    center = vertices.mean(axis=0)
+        # Aplicar recorte si existe
+        if clip_mask is not None:
+            norm        = _normalize(self._points)
+            visible_pts = self._points[clip_mask(norm)]
+        else:
+            visible_pts = self._points
 
-    landmarks = {}
-
-    for name, cfg in _REGIONS.items():
-        mask = cfg["filter"](norm)
-        n_filtered = mask.sum()
-
-        if n_filtered == 0:
-            print(f"[picker] WARNING: Mo points in region for {name}."
-                  f"Check anatomical thresholds.")
-            continue
-
-        print(f"[picker] Region '{name}': {n_filtered} points available.")
-
-        pcd_region = o3d.geometry.PointCloud()
-        pcd_region.points = o3d.utility.Vector3dVector(vertices[mask])
-        pcd_region.paint_uniform_color([0.7, 0.7, 0.7])
-
-        coords = _pick_single_landmark(
-            pcd_region=pcd_region,
-            center=center,
-            name=name,
-            description=cfg["description"],
-            view=cfg["view"],
-            window_size=window_size,
+        logger.log(
+            f"Step {self._step + 1}/3 — {cfg['label']} "
+            f"({len(visible_pts)} pts visibles)",
+            LogLevel.INFO
         )
 
-        if coords is not None:
-            landmarks[name] = coords
+        # Panel derecho: nube completa en blanco
+        self._plotter_pick.clear()
+        self._plotter_pick.set_background(BACKGROUND_COLOR)
+        self._plotter_pick.add_points(
+            self._cloud,
+            color="#ffffff",
+            point_size=2.0,
+            render_points_as_spheres=False,
+        )
+        self.hint_changed.emit(
+            f"Step {self._step + 1} / 3  —  Select {cfg['label']}"
+        )
+        self._plotter_pick.add_axes(
+            line_width=3, labels_off=False,
+            x_color="#ff4444", y_color="#44ff44", z_color="#4488ff",
+        )
 
-    print(f"\n[picker] Picking complete. {len(landmarks)}/3 landmarks collected.")
-    return landmarks
+        self._set_camera(cfg["camera"])
+
+        self._plotter_pick.enable_point_picking(
+            callback=self._on_point_picked,
+            show_message=False,
+            color=LANDMARK_COLORS[name],
+            point_size=12,
+            use_picker=True,
+            pickable_window=False,
+        )
+        self._plotter_pick.render()
+
+    def _set_camera(self, preset_key: str) -> None:
+        preset = CAMERA_PRESETS[preset_key]
+        c      = self._center
+        bounds = self._cloud.bounds
+        span   = max(
+            bounds[1]-bounds[0],
+            bounds[3]-bounds[2],
+            bounds[5]-bounds[4],
+        )
+        offset = np.array(preset["position"]) * span * 1.8
+
+        self._plotter_pick.camera.position    = (c + offset).tolist()
+        self._plotter_pick.camera.focal_point = c.tolist()
+        self._plotter_pick.camera.up          = preset["up"]
+        self._plotter_pick.enable_parallel_projection()
+        self._plotter_pick.reset_camera()
+
+    def _on_point_picked(self, point: np.ndarray, picker) -> None:
+        if point is None:
+            return
+
+        cfg       = LANDMARK_SEQUENCE[self._step]
+        name      = cfg["name"]
+        clip_mask = cfg["clip_mask"]
+
+        if clip_mask is not None:
+            norm        = _normalize(self._points)
+            visible_pts = self._points[clip_mask(norm)]
+        else:
+            visible_pts = self._points
+
+        renderer = self._plotter_pick.renderer
+
+        # Proyectar el punto clickado a pantalla
+        renderer.SetWorldPoint(point[0], point[1], point[2], 1.0)
+        renderer.WorldToDisplay()
+        cx, cy, _ = renderer.GetDisplayPoint()
+        click_2d  = np.array([cx, cy])
+
+        # Proyectar TODOS los puntos visibles a pantalla
+        pts_2d = []
+        for p in visible_pts:
+            renderer.SetWorldPoint(p[0], p[1], p[2], 1.0)
+            renderer.WorldToDisplay()
+            dx, dy, _ = renderer.GetDisplayPoint()
+            pts_2d.append([dx, dy])
+        pts_2d = np.array(pts_2d)
+
+        # Buscar el más cercano en 2D
+        dists_2d = np.linalg.norm(pts_2d - click_2d, axis=1)
+        nearest  = visible_pts[dists_2d.argmin()]
+
+        self._landmarks[name] = nearest
+        logger.log(f"{name}: {np.round(nearest, 2)}", LogLevel.SUCCESS)
+
+        self._add_landmark_marker(name, nearest)
+        self._plotter_pick.disable_picking()
+
+        self._step += 1
+        self._pick_current_step()
+
+    def _add_landmark_marker(self, name: str, coords: np.ndarray) -> None:
+        bounds = self._cloud.bounds
+        span   = max(bounds[1]-bounds[0], bounds[3]-bounds[2], bounds[5]-bounds[4])
+        radius = span * 0.015
+
+        sphere = pv.Sphere(radius=radius, center=coords.tolist())
+        self._plotter_global.add_mesh(
+            sphere,
+            color=LANDMARK_COLORS[name],
+            smooth_shading=True,
+        )
+        self._plotter_global.render()
+
+    def _finish(self) -> None:
+        n = len(self._landmarks)
+        logger.log(
+            f"Picking complete — {n}/3 landmarks collected",
+            LogLevel.SUCCESS if n == 3 else LogLevel.WARNING
+        )
+        self.hint_changed.emit("")  # limpiar texto
+        self._plotter_pick.disable_picking()
+        self._plotter_pick.enable_trackball_style()
+        self._plotter_pick.reset_key_events()
+
+        if self._callback:
+            self._callback(self._landmarks)

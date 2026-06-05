@@ -23,6 +23,10 @@ def load_pointcloud(path: str | Path) -> o3d.geometry.PointCloud:
         raise ValueError(f"Could not read point cloud from '{path}'. "
                          "Check the file format.")
 
+    print(f"[load_pointcloud] {len(pcd.points)} points, "
+        f"Normals: {pcd.has_normals()}, " 
+        f"Colors: {pcd.has_colors()}")
+
     return pcd
 
 def load_mesh(path:str | Path) -> o3d.geometry.TriangleMesh:
@@ -52,6 +56,8 @@ def load_mesh(path:str | Path) -> o3d.geometry.TriangleMesh:
     print(f"[load_mesh] {len(mesh.vertices)} vertices, "
           f"{len(mesh.triangles)} triangles. "
           f"Normals: {mesh.has_vertex_normals()}, " 
-          f"Colors: {mesh.has_vertex_colors()}")
+          f"Colors: {mesh.has_vertex_colors()}, "
+          f"Self Intersecting: {mesh.is_self_intersecting()}, "
+          f"Is orientable: {mesh.is_orientable()}")
 
     return mesh
