@@ -53,8 +53,8 @@ class PointCloudViewer(QWidget):
             logger.log(f"No se pudieron cargar puntos desde: {path}", LogLevel.ERROR)
             return
 
-        logger.log(f"Loaded {len(pcd_o3d.points)} puntos", LogLevel.SUCCESS)
-        pcd_o3d = voxel_downsample(pcd_o3d, voxel_size=DEFAULT_VOXEL_SIZE)
+        if path.endswith(".ply"):
+            pcd_o3d = voxel_downsample(pcd_o3d, voxel_size=DEFAULT_VOXEL_SIZE)
 
         points = np.asarray(pcd_o3d.points)
         cloud  = pv.PolyData(points)
