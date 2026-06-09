@@ -101,7 +101,7 @@ class PointCloudViewer(QWidget):
     def show_landmarks(self, landmarks: dict) -> None:
         bounds = self._current_cloud.bounds
         span   = max(bounds[1]-bounds[0], bounds[3]-bounds[2], bounds[5]-bounds[4])
-        radius = span * 0.015
+        radius = span * 0.01
 
         for name, coords in landmarks.items():
             sphere = pv.Sphere(radius=radius, center=coords.tolist())
@@ -219,7 +219,7 @@ class PointCloudViewer(QWidget):
         if landmarks:
             bounds = self._current_cloud.bounds
             span   = max(bounds[1]-bounds[0], bounds[3]-bounds[2], bounds[5]-bounds[4])
-            radius = span * 0.015
+            radius = span * 0.01
             for name, coords in landmarks.items():
                 sphere = pv.Sphere(radius=radius, center=coords.tolist())
                 self.plotter_pick.add_mesh(
@@ -307,7 +307,7 @@ class PointCloudViewer(QWidget):
         if landmarks:
             bounds = self._current_cloud.bounds
             span   = max(bounds[1]-bounds[0], bounds[3]-bounds[2], bounds[5]-bounds[4])
-            radius = span * 0.015
+            radius = span * 0.01
             for name, coords in landmarks.items():
                 sphere = pv.Sphere(radius=radius, center=coords.tolist())
                 self.plotter.add_mesh(
@@ -329,56 +329,40 @@ class PointCloudViewer(QWidget):
             smooth_shading=True,
         )
         
-        # Los 10 contornos alrededor de cada plano (rojo) y level 3 en verde
-        from src.siv.processing.geometry import compute_contour_band
-        
+        from src.siv.processing.geometry import compute_mesh_plane_intersection
+
         for i, lvl in enumerate(all_levels):
-            if i < 2:  # Saltar los niveles 1 y 2
+            if i < 2:
                 continue
-            
-            _, mask = compute_contour_band(
-                points             = vertices_o3d,
-                normal             = plane_normal,
-                plane_center       = lvl["center"],
-                band_half_width_mm = 1.0,
+
+            lvl_contour = compute_mesh_plane_intersection(
+                mesh         = mesh,
+                normal       = plane_normal,
+                plane_center = lvl["center"],
             )
-            band = vertices_o3d[mask]
-            if len(band) > 0:
-                color = "#00ff00" if i == 2 else "#ff2222"
-                self.plotter.add_points(
-                    pv.PolyData(band),
-                    color=color,
-                    point_size=4.0,
-                    render_points_as_spheres=False,
-                )
-        
-        # ── Contorno del level 3 como línea cerrada (amarillo oscuro) ─────────────
-        if len(contour) > 0:
-            contour_centered = contour - plane_center
-            angles = np.arctan2(
-                np.dot(contour_centered, x_axis),
-                np.dot(contour_centered, y_axis),
-            )
-            sorted_idx = np.argsort(angles)
-            contour_sorted = contour[sorted_idx]
-            
-            n_pts = len(contour_sorted)
-            lines = [[i, (i + 1) % n_pts] for i in range(n_pts)]
-            
-            contour_poly = pv.PolyData(contour_sorted)
-            contour_poly.lines = np.hstack([[2, i, j] for i, j in lines]).astype(np.int32)
-            
-            self.plotter.add_mesh(
-                contour_poly,
-                color="#b8860b",  # amarillo oscuro
-                line_width=3,     # más grueso
-                render_lines_as_tubes=False,
-            )
-        
+            if len(lvl_contour) < 3:
+                continue
+
+            # Ordenar contorno
+            cc = lvl_contour - lvl["center"]
+            ang = np.arctan2(np.dot(cc, x_axis), np.dot(cc, y_axis))
+            lvl_contour = lvl_contour[np.argsort(ang)]
+
+            n_pts = len(lvl_contour)
+            lines_arr = np.hstack([[2, k, (k+1) % n_pts] for k in range(n_pts)]).astype(np.int32)
+            poly = pv.PolyData(lvl_contour)
+            poly.lines = lines_arr
+
+            color = "#b8860b" if i == 2 else "#8b0000"   # nivel 3: amarillo oscuro, resto: rojo oscuro
+            self.plotter.add_mesh(poly, color=color, line_width=2, render_lines_as_tubes=False)
+
         # Vista lateral sin perspectiva
         self.plotter.enable_parallel_projection()
         self.plotter.view_xz()
-        self.plotter.add_axes(line_width=3, labels_off=False)
+        self.plotter.add_axes(
+            line_width=3, labels_off=False,
+            x_color="#ff4444", y_color="#44ff44", z_color="#4488ff",
+        )
         self.plotter.render()
         
         # ── Viewport DERECHO: contorno level 3 + ejes locales ─────────────────
@@ -448,7 +432,7 @@ class PointCloudViewer(QWidget):
         
         # Cámara: vista desde arriba perpendicular al plano
         # Mirando "hacia abajo" (hacia Frankfurt), con Y apuntando hacia arriba en pantalla
-        span = 100.0
+        span = 65.0
 
         # Fijar la cámara ANTES de reset_camera para que no se recalcule
         contour_center = np.mean(contour, axis=0)
@@ -457,6 +441,13 @@ class PointCloudViewer(QWidget):
         self.plotter_pick.camera.up          = y_axis.tolist()
         self.plotter_pick.enable_parallel_projection()
         self.plotter_pick.camera.zoom(0.25)
+
+        self.plotter.camera.position    = (contour_center + plane_normal * span).tolist()
+        self.plotter.camera.focal_point = contour_center.tolist()
+        self.plotter.camera.up          = y_axis.tolist()
+        self.plotter.enable_parallel_projection()
+        self.plotter.camera.zoom(0.25)
+        self.plotter.render()
         self.plotter_pick.render()
 
     def show_measurement_preview(
@@ -490,7 +481,7 @@ class PointCloudViewer(QWidget):
         if landmarks:
             bounds = self._current_cloud.bounds
             span   = max(bounds[1]-bounds[0], bounds[3]-bounds[2], bounds[5]-bounds[4])
-            radius = span * 0.015
+            radius = span * 0.01
             for name, coords in landmarks.items():
                 sphere = pv.Sphere(radius=radius, center=coords.tolist())
                 self.plotter.add_mesh(
@@ -512,33 +503,43 @@ class PointCloudViewer(QWidget):
             smooth_shading=True,
         )
         
-        # Contornos de planos 3-10
-        from src.siv.processing.geometry import compute_contour_band
-        
+        from src.siv.processing.geometry import compute_mesh_plane_intersection
+
         for i, lvl in enumerate(all_levels):
-            if i < 2:  # Saltar niveles 1 y 2
+            if i < 2:
                 continue
-            
-            _, mask = compute_contour_band(
-                points             = vertices_o3d,
-                normal             = plane_normal,
-                plane_center       = lvl["center"],
-                band_half_width_mm = 1.0,
+
+            lvl_contour = compute_mesh_plane_intersection(
+                mesh         = mesh,
+                normal       = plane_normal,
+                plane_center = lvl["center"],
             )
-            band = vertices_o3d[mask]
-            if len(band) > 0:
-                color = "#00ff00" if i == 2 else "#ff2222"
-                self.plotter.add_points(
-                    pv.PolyData(band),
-                    color=color,
-                    point_size=4.0,
-                    render_points_as_spheres=False,
-                )
+            if len(lvl_contour) < 3:
+                continue
+
+            # Ordenar contorno
+            # Usamos un eje de referencia genérico para ordenar en preview
+            ref_ax = np.array([1.0, 0.0, 0.0])
+            ref_ax2 = np.array([0.0, 1.0, 0.0])
+            cc = lvl_contour - lvl["center"]
+            ang = np.arctan2(np.dot(cc, ref_ax), np.dot(cc, ref_ax2))
+            lvl_contour = lvl_contour[np.argsort(ang)]
+
+            n_pts = len(lvl_contour)
+            lines_arr = np.hstack([[2, k, (k+1) % n_pts] for k in range(n_pts)]).astype(np.int32)
+            poly = pv.PolyData(lvl_contour)
+            poly.lines = lines_arr
+
+            color = "#00ff00" if i == 2 else "#8b0000"
+            self.plotter.add_mesh(poly, color=color, line_width=2, render_lines_as_tubes=False)
         
         # Configurar vista
         self.plotter.enable_parallel_projection()
         self.plotter.view_isometric()
-        self.plotter.add_axes(line_width=3, labels_off=False)
+        self.plotter.add_axes(
+            line_width=3, labels_off=False,
+            x_color="#ff4444", y_color="#44ff44", z_color="#4488ff",
+        )
         self.plotter.render()
 
     def reset(self) -> None:
@@ -570,6 +571,13 @@ class PointCloudViewer(QWidget):
         self.plotter_pick.enable_trackball_style()
         self.plotter_pick.reset_key_events()
         self.plotter_pick.render()
+    
+    def lock_camera_rotation(self):
+        """Deshabilita la rotación libre manteniendo zoom y paneo."""
+        interactor = self.plotter_pick.interactor
+        interactor.RemoveObservers("LeftButtonPressEvent")
+        interactor.RemoveObservers("MouseMoveEvent")
+        interactor.AddObserver("LeftButtonPressEvent", lambda o, e: None)
 
     def closeEvent(self, event):
         # Suprimir warnings de VTK durante el cierre

@@ -64,11 +64,12 @@ class MainWindow(QMainWindow):
         # Botones
         self.ui.qpushButton_landmarks.clicked.connect(self._start_landmark_picking)
         self.ui.qpushButton_compute.clicked.connect(self._compute_indices)
+        self.ui.qpushButton_uncertainty.clicked.connect(lambda: self._run_uncertainty())
 
         # Texto hint picking
         self.viewer.picking_hint.connect(self._update_picking_hint)
 
-        # Toolbar
+        # Toolbarc
         self._init_toolbar()
 
         # Stylesheet
@@ -154,6 +155,7 @@ class MainWindow(QMainWindow):
         )
         # Mostrar botón Compute Indices
         self.ui.qpushButton_compute.setVisible(True)
+        self.ui.qpushButton_uncertainty.setVisible(False)
         self._compute_cranial_planes()
 
     def _calculate_measurement_data(self):
@@ -268,7 +270,7 @@ class MainWindow(QMainWindow):
 
     def _compute_indices(self):
         if self._cranial_mesh is None:
-            logger.log("No hay malla reconstruida", LogLevel.WARNING)
+            logger.log("No mesh reconstructed", LogLevel.WARNING)
             return
 
         # ── Mostrar visualización igual que en cranial_planes ────────────────
@@ -306,7 +308,7 @@ class MainWindow(QMainWindow):
             )
             
             if len(contour_lvl) < 10:
-                logger.log(f"Level {lvl['level']}: insuficientes puntos de contorno", LogLevel.WARNING)
+                logger.log(f"Level {lvl['level']}: insufficient contour points", LogLevel.WARNING)
                 continue
             
             x_axis_lvl, y_axis_lvl, z_axis_lvl = compute_local_coordinate_system(
@@ -342,7 +344,6 @@ class MainWindow(QMainWindow):
 
         # ── Resumen final ────────────────────────────────────────────────────
         if cvai_results:
-            logger.log(f"\n{'='*80}", LogLevel.INFO)
             logger.log("CVAI Analysis Summary (Levels 3-10):", LogLevel.INFO)
             for result in cvai_results:
                 logger.log(
@@ -350,7 +351,10 @@ class MainWindow(QMainWindow):
                     f"ratio={result['ratio']:.4f}, shorter={result['cvai_shorter']:.2f}%, longer={result['cvai_longer']:.2f}%",
                     LogLevel.SUCCESS
                 )
-            logger.log(f"{'='*80}\n", LogLevel.INFO)
+        
+        self.ui.qpushButton_uncertainty.setVisible(True)
+        self._cvai_results_nominal = cvai_results
+        self.viewer.lock_camera_rotation()
 
     def _clean_window(self):
         self.viewer.clear()
@@ -366,6 +370,7 @@ class MainWindow(QMainWindow):
         self.ui.action_bar.setVisible(False)
         self.ui.qpushButton_landmarks.setVisible(True)
         self.ui.qpushButton_compute.setVisible(False)
+        self.ui.qpushButton_uncertainty.setVisible(False)
 
         # UI - ocultar texto hint picker
         self.ui.label_picking_hint.setVisible(False)
@@ -386,7 +391,154 @@ class MainWindow(QMainWindow):
         else:
             self.ui.label_picking_hint.setVisible(False)
             self.ui.label_picking_hint.setText("")
+    
+    def _run_uncertainty(self, n_samples: int = 500):
+        """Run Class-1 Monte Carlo perturbation and report CVAI distribution."""
+        from src.siv.processing.uncertainty import (
+            perturb_landmarks,
+            summarise_cvai_distribution,
+            SIGMA_BY_LANDMARK,
+        )
+        from src.siv.processing.geometry import (
+            compute_cvai_intersection,
+            compute_mesh_plane_intersection,
+            compute_local_coordinate_system,
+            compute_reference_plane,
+        )
 
+        if not self._landmarks or self._cranial_mesh is None:
+            logger.log("No landmarks or mesh available", LogLevel.WARNING)
+            return
+
+        logger.log(f"Uncertainty analysis — Class 1 — {n_samples} samples", LogLevel.INFO)
+
+        # ── Pre-calcular contornos nominales una sola vez por nivel ──────────────
+        nominal_contours = {}
+        for level_idx in range(2, 10):
+            lvl     = self._cranial_levels[level_idx]
+            contour = compute_mesh_plane_intersection(
+                mesh         = self._cranial_mesh,
+                normal       = self._frankfurt_normal,
+                plane_center = lvl["center"],
+            )
+            nominal_contours[level_idx] = contour
+
+        # ── Generar N realizaciones perturbadas de los landmarks ─────────────────
+        samples = perturb_landmarks(
+            landmarks    = self._landmarks,
+            mesh         = self._cranial_mesh,
+            n_samples    = n_samples,
+            sigma_errors = SIGMA_BY_LANDMARK,
+            seed         = 42,
+        )
+
+        # ── Para cada nivel, acumular CVAI de todas las realizaciones ────────────
+        results_by_level: dict[int, dict] = {}
+
+        for level_idx in range(2, 10):
+            lvl     = self._cranial_levels[level_idx]
+            contour = nominal_contours[level_idx]
+
+            if len(contour) < 10:
+                continue
+
+            cvai_list = []
+
+            for sample_lm in samples:
+                try:
+                    s_normal, s_center, _, _ = compute_reference_plane(
+                        sellion       = sample_lm["sellion"],
+                        right_tragion = sample_lm["right tragion"],
+                        left_tragion  = sample_lm["left tragion"],
+                    )
+                    if s_normal[2] < 0:
+                        s_normal = -s_normal
+                except ValueError:
+                    continue
+
+                x_ax, y_ax, _ = compute_local_coordinate_system(
+                    sellion = sample_lm["sellion"],
+                    center  = lvl["center"],
+                    normal  = s_normal,
+                )
+
+                # Ordenar contorno nominal con los ejes perturbados
+                angles         = np.arctan2(
+                    np.dot(contour - lvl["center"], x_ax),
+                    np.dot(contour - lvl["center"], y_ax),
+                )
+                contour_sorted = contour[np.argsort(angles)]
+
+                cvai_data = compute_cvai_intersection(
+                    contour      = contour_sorted,
+                    plane_center = lvl["center"],
+                    x_axis       = x_ax,
+                    y_axis       = y_ax,
+                )
+
+                if cvai_data:
+                    d1, d2 = cvai_data["dist1"], cvai_data["dist2"]
+                    if min(d1, d2) < 0.1:   # realización inválida → descartar
+                        continue
+                    cvai_s = abs(d1 - d2) / min(d1, d2) * 100
+                    cvai_list.append(cvai_s)
+
+            if cvai_list:
+                stats = summarise_cvai_distribution(np.array(cvai_list))
+                results_by_level[lvl["level"]] = stats
+
+        # ── Log de resultados ────────────────────────────────────────────────────
+        logger.log(
+            f"{'Lvl':>4}  {'Nominal':>8}  {'Mean':>8}  {'Std':>6}  "
+            f"{'P5':>7}  {'P95':>7}  {'CV%':>6}",
+            LogLevel.INFO
+        )
+
+        nominal_map = {r["level"]: r["cvai_shorter"] for r in self._cvai_results_nominal}
+
+        for level_num, stats in sorted(results_by_level.items()):
+            nom = nominal_map.get(level_num, float("nan"))
+            logger.log(
+                f"{level_num:>4}  {nom:>8.2f}  {stats['mean']:>8.2f}  "
+                f"{stats['std']:>6.2f}  {stats['p5']:>7.2f}  "
+                f"{stats['p95']:>7.2f}  {stats['cv']:>6.1f}",
+                LogLevel.SUCCESS
+            )
+
+
+        # Guardar para batch/export posterior
+        self._uncertainty_results = results_by_level
+
+        # ── Visualizar elipses de incertidumbre sobre la nube de puntos ──────────────
+        from src.siv.processing.uncertainty import compute_landmark_ellipse
+        import pyvista as pv
+
+        ELLIPSE_COLORS = {
+            "sellion":       "yellow",
+            "right tragion": "red",
+            "left tragion":  "green",
+        }
+
+        for name, point in self._landmarks.items():
+            verts = compute_landmark_ellipse(
+                name = name,
+                point = point,
+                mesh  = self._cranial_mesh,
+                sigma_errors = SIGMA_BY_LANDMARK
+            )
+
+            verts_closed = np.vstack([verts, verts[0]])
+            spline = pv.Spline(verts_closed, n_points=200)
+
+            self.viewer.plotter.add_mesh(
+                spline,
+                color      = ELLIPSE_COLORS.get(name, "white"),
+                line_width = 3,
+                label      = f"{name} ±2σ",
+            )
+
+        self.viewer.plotter.render()
+        
     def closeEvent(self, event):
         self.viewer.closeEvent(event)
         super().closeEvent(event)

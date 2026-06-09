@@ -20,9 +20,6 @@
     </property>
     <item>
      <widget class="QLabel" name="label_picking_hint">
-      <property name="visible"><bool>false</bool></property>
-      <property name="text"><string></string></property>
-      <property name="alignment"><set>Qt::AlignCenter</set></property>
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
         <horstretch>0</horstretch>
@@ -30,7 +27,19 @@
        </sizepolicy>
       </property>
       <property name="maximumSize">
-       <size><width>16777215</width><height>36</height></size>
+       <size>
+        <width>16777215</width>
+        <height>36</height>
+       </size>
+      </property>
+      <property name="visible">
+       <bool>false</bool>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignCenter</set>
       </property>
      </widget>
     </item>
@@ -46,9 +55,6 @@
     </item>
     <item>
      <widget class="QWidget" name="action_bar" native="true">
-      <property name="visible">
-       <bool>false</bool>
-      </property>
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
         <horstretch>0</horstretch>
@@ -61,34 +67,103 @@
         <height>70</height>
        </size>
       </property>
+      <property name="visible">
+       <bool>false</bool>
+      </property>
       <layout class="QHBoxLayout" name="horizontalLayout_actions">
        <item>
         <spacer name="horizontalSpacer_left">
-         <property name="orientation"><enum>Qt::Horizontal</enum></property>
-         <property name="sizeType"><enum>QSizePolicy::Expanding</enum></property>
-         <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Policy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
         </spacer>
        </item>
        <item>
         <widget class="QPushButton" name="qpushButton_landmarks">
-         <property name="text"><string>  SELECT LANDMARKS</string></property>
-         <property name="minimumSize"><size><width>200</width><height>48</height></size></property>
-         <property name="maximumSize"><size><width>300</width><height>48</height></size></property>
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>48</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>300</width>
+           <height>48</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>  SELECT LANDMARKS</string>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="qpushButton_compute">
-         <property name="visible"><bool>false</bool></property>
-         <property name="text"><string>  COMPUTE INDICES</string></property>
-         <property name="minimumSize"><size><width>200</width><height>48</height></size></property>
-         <property name="maximumSize"><size><width>300</width><height>48</height></size></property>
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>48</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>300</width>
+           <height>48</height>
+          </size>
+         </property>
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>  COMPUTE INDICES</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="qpushButton_uncertainty">
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>48</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>300</width>
+           <height>48</height>
+          </size>
+         </property>
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>  RUN UNCERTAINTY</string>
+         </property>
         </widget>
        </item>
        <item>
         <spacer name="horizontalSpacer_right">
-         <property name="orientation"><enum>Qt::Horizontal</enum></property>
-         <property name="sizeType"><enum>QSizePolicy::Expanding</enum></property>
-         <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Policy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
         </spacer>
        </item>
       </layout>
@@ -96,7 +171,6 @@
     </item>
     <item>
      <widget class="QTextEdit" name="textEdit_log">
-      <property name="readOnly"><bool>true</bool></property>
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
         <horstretch>0</horstretch>
@@ -108,6 +182,9 @@
         <width>16777215</width>
         <height>100</height>
        </size>
+      </property>
+      <property name="readOnly">
+       <bool>true</bool>
       </property>
      </widget>
     </item>

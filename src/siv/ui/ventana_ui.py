@@ -31,14 +31,14 @@ class Ui_MainWindow(object):
         self.verticalLayout_main.setObjectName(u"verticalLayout_main")
         self.label_picking_hint = QLabel(self.centralwidget)
         self.label_picking_hint.setObjectName(u"label_picking_hint")
-        self.label_picking_hint.setVisible(False)
-        self.label_picking_hint.setAlignment(Qt.AlignCenter)
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.label_picking_hint.sizePolicy().hasHeightForWidth())
         self.label_picking_hint.setSizePolicy(sizePolicy)
         self.label_picking_hint.setMaximumSize(QSize(16777215, 36))
+        self.label_picking_hint.setVisible(False)
+        self.label_picking_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.verticalLayout_main.addWidget(self.label_picking_hint)
 
@@ -54,10 +54,10 @@ class Ui_MainWindow(object):
 
         self.action_bar = QWidget(self.centralwidget)
         self.action_bar.setObjectName(u"action_bar")
-        self.action_bar.setVisible(False)
         sizePolicy.setHeightForWidth(self.action_bar.sizePolicy().hasHeightForWidth())
         self.action_bar.setSizePolicy(sizePolicy)
         self.action_bar.setMaximumSize(QSize(16777215, 70))
+        self.action_bar.setVisible(False)
         self.horizontalLayout_actions = QHBoxLayout(self.action_bar)
         self.horizontalLayout_actions.setObjectName(u"horizontalLayout_actions")
         self.horizontalSpacer_left = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -73,11 +73,19 @@ class Ui_MainWindow(object):
 
         self.qpushButton_compute = QPushButton(self.action_bar)
         self.qpushButton_compute.setObjectName(u"qpushButton_compute")
-        self.qpushButton_compute.setVisible(False)
         self.qpushButton_compute.setMinimumSize(QSize(200, 48))
         self.qpushButton_compute.setMaximumSize(QSize(300, 48))
+        self.qpushButton_compute.setVisible(False)
 
         self.horizontalLayout_actions.addWidget(self.qpushButton_compute)
+
+        self.qpushButton_uncertainty = QPushButton(self.action_bar)
+        self.qpushButton_uncertainty.setObjectName(u"qpushButton_uncertainty")
+        self.qpushButton_uncertainty.setMinimumSize(QSize(200, 48))
+        self.qpushButton_uncertainty.setMaximumSize(QSize(300, 48))
+        self.qpushButton_uncertainty.setVisible(False)
+
+        self.horizontalLayout_actions.addWidget(self.qpushButton_uncertainty)
 
         self.horizontalSpacer_right = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -88,10 +96,10 @@ class Ui_MainWindow(object):
 
         self.textEdit_log = QTextEdit(self.centralwidget)
         self.textEdit_log.setObjectName(u"textEdit_log")
-        self.textEdit_log.setReadOnly(True)
         sizePolicy.setHeightForWidth(self.textEdit_log.sizePolicy().hasHeightForWidth())
         self.textEdit_log.setSizePolicy(sizePolicy)
         self.textEdit_log.setMaximumSize(QSize(16777215, 100))
+        self.textEdit_log.setReadOnly(True)
 
         self.verticalLayout_main.addWidget(self.textEdit_log)
 
@@ -111,5 +119,6 @@ class Ui_MainWindow(object):
         self.label_picking_hint.setText("")
         self.qpushButton_landmarks.setText(QCoreApplication.translate("MainWindow", u"  SELECT LANDMARKS", None))
         self.qpushButton_compute.setText(QCoreApplication.translate("MainWindow", u"  COMPUTE INDICES", None))
+        self.qpushButton_uncertainty.setText(QCoreApplication.translate("MainWindow", u"  RUN UNCERTAINTY", None))
     # retranslateUi
 
