@@ -73,6 +73,24 @@ QPushButton#qpushButton_uncertainty:pressed {
     background-color: #4752c4;
 }
 
+QPushButton#qpushButton_automatic {
+    background-color: rgb(40, 43, 48);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QPushButton#qpushButton_automatic:hover {
+    background-color: #5865F2;
+}
+
+QPushButton#qpushButton_automatic:pressed {
+    background-color: #4752c4;
+}
+
 QLabel#label_picking_hint {
     background-color: rgb(54, 57, 63);
     color: #ffffff;

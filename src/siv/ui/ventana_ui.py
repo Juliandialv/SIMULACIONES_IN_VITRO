@@ -87,6 +87,13 @@ class Ui_MainWindow(object):
 
         self.horizontalLayout_actions.addWidget(self.qpushButton_uncertainty)
 
+        self.qpushButton_automatic = QPushButton(self.action_bar)
+        self.qpushButton_automatic.setObjectName(u"qpushButton_automatic")
+        self.qpushButton_automatic.setMinimumSize(QSize(200, 48))
+        self.qpushButton_automatic.setMaximumSize(QSize(300, 48))
+
+        self.horizontalLayout_actions.addWidget(self.qpushButton_automatic)
+
         self.horizontalSpacer_right = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayout_actions.addItem(self.horizontalSpacer_right)
@@ -120,5 +127,6 @@ class Ui_MainWindow(object):
         self.qpushButton_landmarks.setText(QCoreApplication.translate("MainWindow", u"  SELECT LANDMARKS", None))
         self.qpushButton_compute.setText(QCoreApplication.translate("MainWindow", u"  COMPUTE INDICES", None))
         self.qpushButton_uncertainty.setText(QCoreApplication.translate("MainWindow", u"  RUN UNCERTAINTY", None))
+        self.qpushButton_automatic.setText(QCoreApplication.translate("MainWindow", u"  AUTOMATIC LANDMARKS", None))
     # retranslateUi
 

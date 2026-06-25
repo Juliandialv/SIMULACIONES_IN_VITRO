@@ -65,6 +65,7 @@ class MainWindow(QMainWindow):
         self.ui.qpushButton_landmarks.clicked.connect(self._start_landmark_picking)
         self.ui.qpushButton_compute.clicked.connect(self._compute_indices)
         self.ui.qpushButton_uncertainty.clicked.connect(lambda: self._run_uncertainty())
+        self.ui.qpushButton_automatic.clicked.connect(self._run_automatic_landmarks)
 
         # Texto hint picking
         self.viewer.picking_hint.connect(self._update_picking_hint)
@@ -145,6 +146,7 @@ class MainWindow(QMainWindow):
     def _start_landmark_picking(self):
         # Ocultar botón — no tiene sentido volver a pulsarlo
         self.ui.qpushButton_landmarks.setVisible(False)
+        self.ui.qpushButton_automatic.setVisible(False)
         self.viewer.start_landmark_picking(self._on_landmarks_complete)
 
     def _on_landmarks_complete(self, landmarks: dict):
@@ -371,6 +373,7 @@ class MainWindow(QMainWindow):
         self.ui.qpushButton_landmarks.setVisible(True)
         self.ui.qpushButton_compute.setVisible(False)
         self.ui.qpushButton_uncertainty.setVisible(False)
+        self.ui.qpushButton_automatic.setVisible(False)
 
         # UI - ocultar texto hint picker
         self.ui.label_picking_hint.setVisible(False)
@@ -405,6 +408,9 @@ class MainWindow(QMainWindow):
             compute_local_coordinate_system,
             compute_reference_plane,
         )
+
+        logger.log("Running uncertainty analysis...", LogLevel.INFO)
+        QApplication.processEvents()
 
         if not self._landmarks or self._cranial_mesh is None:
             logger.log("No landmarks or mesh available", LogLevel.WARNING)
@@ -538,7 +544,24 @@ class MainWindow(QMainWindow):
             )
 
         self.viewer.plotter.render()
+    
+    def _run_automatic_landmarks(self):
+        """Run Automatic Landmark Recognition algorithm."""
+        from src.siv.processing.landmark_detector import(
+            detect_landmarks,
+        )
+
+        if self._pcd_o3d is None:
+            return
+
+        logger.log("Automatic landmark detection algorithm running...", LogLevel.INFO)
+        QApplication.processEvents()
+        landmarks = detect_landmarks(self._pcd_o3d)
+        self._on_landmarks_complete(landmarks)
+        self.ui.qpushButton_automatic.setVisible(False)
+        self.ui.qpushButton_landmarks.setVisible(False)
         
+
     def closeEvent(self, event):
         self.viewer.closeEvent(event)
         super().closeEvent(event)
