@@ -21,12 +21,23 @@ import open3d as o3d
 
 
 # ── Provisional σ values (Class 1) ───────────────────────────────────────────
-# Normal is related to the perpendicular to surface error while tangential is 
+# Normal is related to the perpendicular to surface error while tangential is
 # the one along surface in the landmark search
+#
+# Values differentiated by landmark type, informed by:
+#   - Gwilliam et al. (2006), Eur J Orthod 28(5):408-415 — well-defined bony
+#     landmarks (glabella/nasion/pogonion-type) reproducible <1mm SD/axis
+#     intra-operator; tragion classified as "unacceptable reproducibility"
+#     alongside zygion/gonion.
+#   - Cleft lip 3dMDface study — per-landmark error 0.39mm (sharp-edge
+#     landmarks) up to 2.21mm (soft landmarks, e.g. gonion, structurally
+#     analogous to tragion).
+# NOT sourced from Torres et al. (that error is automatic-detector-vs-
+# manual-ground-truth, a different quantity from manual placement error).
 SIGMA_BY_LANDMARK = {
-    "sellion":       {"sigma_normal": 0.5, "sigma_tangential": 1.0},
-    "right tragion": {"sigma_normal": 0.5, "sigma_tangential": 2.0},
-    "left tragion":  {"sigma_normal": 0.5, "sigma_tangential": 2.0},
+    "sellion":       {"sigma_normal": 0.3, "sigma_tangential": 0.8},
+    "right tragion": {"sigma_normal": 0.6, "sigma_tangential": 2.5},
+    "left tragion":  {"sigma_normal": 0.6, "sigma_tangential": 2.5},
 }
 
 # Number of nearest vertices used to estimate the local surface normal

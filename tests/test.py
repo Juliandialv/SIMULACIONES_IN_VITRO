@@ -2,7 +2,7 @@
 import open3d as o3d
 from pathlib import Path
 
-folder_path = Path("./data/raw/modelsSynth/P")
+folder_path = Path("./data/raw/modelsSynth/N")
 
 for file_path in folder_path.iterdir():
     if file_path.is_file():

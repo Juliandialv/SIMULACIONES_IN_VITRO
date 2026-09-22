@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
         self.ui.qpushButton_landmarks.setVisible(True)
         self.ui.qpushButton_compute.setVisible(False)
         self.ui.qpushButton_uncertainty.setVisible(False)
-        self.ui.qpushButton_automatic.setVisible(False)
+        self.ui.qpushButton_automatic.setVisible(True)
 
         # UI - ocultar texto hint picker
         self.ui.label_picking_hint.setVisible(False)
