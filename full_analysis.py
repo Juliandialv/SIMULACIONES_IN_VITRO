@@ -35,6 +35,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+from figure_style import apply_paper_style
+apply_paper_style()
+
 # ── Umbrales clínicos (Tabla 1 del informe) ─────────────────────────────────
 THRESHOLDS = [3.4, 6.25, 8.75, 11.0]
 CATEGORY_LABELS = [
@@ -245,10 +248,91 @@ def plot_gray_zone(samples: pd.DataFrame, out_dir: Path, grid_points=200, p_thre
 
 
 # ── 7. Flujo de categorías (nominal -> muestras), tipo alluvial simplificado ─
-def plot_category_flow(summary: pd.DataFrame, samples: pd.DataFrame, out_dir: Path):
+# ── 7b. Riesgo de reclasificación y CV agregados por nivel craneal ─────────
+def plot_reclassification_by_level(summary: pd.DataFrame, samples: pd.DataFrame,
+                                     out_dir: Path, reference_level: int = 3):
+    """
+    Extiende el análisis de un único nivel (level3_misclassification_report)
+    a los 7 niveles craneales: para cada nivel, calcula el % de muestras
+    perturbadas que cae en una categoría distinta a la nominal (agregado
+    sobre los 74 modelos) y el CV medio del CVAI en ese nivel.
+
+    reference_level : nivel resaltado como plano de medición estándar
+        (se dibuja en un color distinto en el panel izquierdo).
+    """
+    levels = sorted(summary["level"].unique())
+    pct_reclass, mean_cv, mean_offset = [], [], []
+
+    for level in levels:
+        summ_lv = summary[summary["level"] == level]
+        samp_lv = samples[samples["level"] == level]
+
+        n_reclass, n_total = 0, 0
+        for model, grp in samp_lv.groupby("model"):
+            nom_row = summ_lv[summ_lv["model"] == model]
+            if nom_row.empty:
+                continue
+            nominal_cat = categorize(nom_row["nominal_cvai"].values)[0]
+            sample_cats = categorize(grp["cvai"].values)
+            n_reclass += int((sample_cats != nominal_cat).sum())
+            n_total += len(sample_cats)
+
+        pct_reclass.append(100 * n_reclass / n_total if n_total else np.nan)
+        mean_cv.append(summ_lv["cv"].mean())
+        mean_offset.append(summ_lv["offset_mm"].mean())
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+
+    # -- Panel izquierdo: % de reclasificación por nivel --
+    ax = axes[0]
+    colors = ["#DD8452" if lvl == reference_level else "#4C72B0" for lvl in levels]
+    bars = ax.bar(levels, pct_reclass, color=colors, alpha=0.85, width=0.6)
+    for b, v in zip(bars, pct_reclass):
+        ax.text(b.get_x() + b.get_width() / 2, v + 0.6, f"{v:.1f}%",
+                ha="center", va="bottom", fontsize=8)
+    ax.set_xlabel("Nivel craneal")
+    ax.set_ylabel("Muestras reclasificadas (%)")
+    ax.set_title("Riesgo de reclasificación por nivel")
+    ax.set_xticks(levels)
+    handles = [mpatches.Patch(color="#DD8452", label=f"Nivel {reference_level} (referencia)"),
+               mpatches.Patch(color="#4C72B0", label="Otros niveles")]
+    ax.legend(handles=handles, fontsize=8)
+
+    # -- Panel derecho: CV medio por nivel, con offset_mm como eje superior --
+    ax2 = axes[1]
+    ax2.plot(levels, mean_cv, marker="o", color="#55A868")
+    ax2.set_xlabel("Nivel craneal")
+    ax2.set_ylabel("CV medio del CVAI (%)")
+    ax2.set_title("Variabilidad media por nivel")
+    ax2.set_xticks(levels)
+
+    ax2_top = ax2.twiny()
+    ax2_top.set_xlim(ax2.get_xlim())
+    ax2_top.set_xticks(levels)
+    ax2_top.set_xticklabels([f"{o:.0f}" for o in mean_offset], fontsize=8)
+    ax2_top.set_xlabel("Desplazamiento medio respecto al plano de referencia (mm)", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(out_dir / "reclassification_by_level.png", dpi=200)
+    plt.close(fig)
+
+
+def plot_category_flow(summary: pd.DataFrame, samples: pd.DataFrame, out_dir: Path,
+                        level: int | None = None):
+    """
+    Matriz de transición de categoría diagnóstica (nominal vs. obtenida en
+    las muestras perturbadas).
+
+    level : si se indica, la matriz se calcula únicamente sobre ese nivel
+        craneal (p.ej. level=3, el plano de medición estándar). Si es None
+        (por defecto), se agregan todos los niveles disponibles.
+    """
+    summary_lv = summary if level is None else summary[summary["level"] == level]
+    samples_lv = samples if level is None else samples[samples["level"] == level]
+
     rows = []
-    for (model, level), grp in samples.groupby(["model", "level"]):
-        nom_row = summary[(summary["model"] == model) & (summary["level"] == level)]
+    for (model, lvl), grp in samples_lv.groupby(["model", "level"]):
+        nom_row = summary_lv[(summary_lv["model"] == model) & (summary_lv["level"] == lvl)]
         if nom_row.empty:
             continue
         nominal_cat = categorize(nom_row["nominal_cvai"].values)[0]
@@ -274,7 +358,9 @@ def plot_category_flow(summary: pd.DataFrame, samples: pd.DataFrame, out_dir: Pa
     ax.set_yticklabels(CATEGORY_LABELS, fontsize=7)
     ax.set_xlabel("Categoría obtenida (muestra perturbada)")
     ax.set_ylabel("Categoría nominal")
-    ax.set_title("Matriz de transición de categoría diagnóstica")
+    title = "Matriz de transición de categoría diagnóstica"
+    title += " (todos los niveles)" if level is None else f" (nivel {level})"
+    ax.set_title(title)
 
     for i in range(n_cats):
         for j in range(n_cats):
@@ -285,7 +371,8 @@ def plot_category_flow(summary: pd.DataFrame, samples: pd.DataFrame, out_dir: Pa
 
     fig.colorbar(im, ax=ax, label="N muestras")
     fig.tight_layout()
-    fig.savefig(out_dir / "category_flow.png", dpi=200)
+    out_name = "category_flow.png" if level is None else f"category_flow_level{level}.png"
+    fig.savefig(out_dir / out_name, dpi=200)
     plt.close(fig)
 
 
@@ -494,13 +581,17 @@ def directionality_report(summary: pd.DataFrame, samples: pd.DataFrame,
 
 # ── 10. CVAI obtenido en muestras vs CVAI nominal, por modelo ──────────────
 def plot_samples_vs_nominal_boxplot(summary: pd.DataFrame, samples: pd.DataFrame,
-                                      out_dir: Path, level: int = 3):
+                                      out_dir: Path, level: int = 3,
+                                      landscape: bool = False):
     """
     Boxplot con un bigote por modelo: eje X = CVAI nominal del modelo,
     eje Y = distribución de los CVAI obtenidos en las 500 muestras
     perturbadas. Los bigotes se colocan en su posición real de CVAI nominal
     (no en posiciones categóricas equiespaciadas), así que su dispersión a lo
     largo del eje X y su anchura relativa son comparables entre sí.
+
+    landscape : si True, genera la figura con proporciones pensadas para
+        ocupar una página completa apaisada (más ancha que alta).
     """
     summ_lv = summary[summary["level"] == level]
     samp_lv = samples[samples["level"] == level]
@@ -522,13 +613,20 @@ def plot_samples_vs_nominal_boxplot(summary: pd.DataFrame, samples: pd.DataFrame
     order = np.argsort(positions)
     data = [data[i] for i in order]
     positions = [positions[i] for i in order]
+    models = [models[i] for i in order]
 
     # anchura de caja proporcional al espaciado típico entre modelos vecinos,
     # para que no se solapen mucho pero sigan siendo visibles
     span = max(positions) - min(positions)
     width = max(span / len(positions) * 0.6, 0.05)
 
-    fig, ax = plt.subplots(figsize=(max(10, 0.18 * len(positions) + 4), 6))
+    if landscape:
+        # A4 apaisado ~11.7 x 8.3in; dejamos margen para márgenes/caption
+        figsize = (11, 5.5)
+    else:
+        figsize = (max(10, 0.18 * len(positions) + 4), 6)
+
+    fig, ax = plt.subplots(figsize=figsize)
 
     ax.boxplot(data, positions=positions, widths=width, showfliers=False,
                patch_artist=True,
@@ -577,6 +675,9 @@ def main():
     parser.add_argument("--report-level", type=int, default=3,
                          help="Nivel craneal para el informe de reclasificación "
                               "por modelo (por defecto 3, medición tradicional).")
+    parser.add_argument("--landscape", action="store_true",
+                         help="Genera el boxplot samples-vs-nominal con proporciones "
+                              "de página completa apaisada.")
     args = parser.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -609,8 +710,12 @@ def main():
         print("→ gray_zone_diagram.png")
         plot_gray_zone(samples, args.out)
 
-        print("→ category_flow.png")
-        plot_category_flow(summary, samples, args.out)
+        print(f"→ category_flow_level{args.report_level}.png")
+        plot_category_flow(summary, samples, args.out, level=args.report_level)
+
+        print("→ reclassification_by_level.png")
+        plot_reclassification_by_level(summary, samples, args.out,
+                                         reference_level=args.report_level)
 
         print(f"→ level{args.report_level}_misclassification_report.png "
               f"+ level{args.report_level}_misclassification_table.csv")
@@ -621,7 +726,8 @@ def main():
         directionality_report(summary, samples, args.out, level=args.report_level)
 
         print(f"→ level{args.report_level}_samples_vs_nominal_boxplot.png")
-        plot_samples_vs_nominal_boxplot(summary, samples, args.out, level=args.report_level)
+        plot_samples_vs_nominal_boxplot(summary, samples, args.out, level=args.report_level,
+                                          landscape=args.landscape)
     else:
         print("No se ha proporcionado (o está vacío) el CSV de muestras: "
               "se omiten las figuras 5-7, que dependen de la distribución "
@@ -632,3 +738,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

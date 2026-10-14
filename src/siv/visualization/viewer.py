@@ -393,7 +393,7 @@ class PointCloudViewer(QWidget):
             )
                     
         # Ejes locales X (rojo) e Y (verde)
-        axis_length = 30.0
+        axis_length = 20.0
         for direction, color in [(x_axis, "#ff0000"), (y_axis, "#00ff00")]:
             start = plane_center
             end   = plane_center + direction * axis_length
@@ -419,7 +419,7 @@ class PointCloudViewer(QWidget):
                 
                 # Línea diagonal
                 line = pv.Line(pt_neg, pt_pos)
-                self.plotter_pick.add_mesh(line, color="#5865F2", line_width=1)
+                self.plotter_pick.add_mesh(line, color="#5865F2", line_width=2)
                 
                 # Pequeñas esferas en los puntos de intersección
                 radius = 1.5
